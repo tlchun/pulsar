@@ -9,7 +9,6 @@
 -module(pulsar_api).
 -author("root").
 
--module(pulsar_client).
 
 -behaviour(gen_server).
 
