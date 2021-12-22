@@ -23,7 +23,6 @@
   terminate/3,
   code_change/4]).
 
--vsn("4.2.6").
 
 callback_mode() -> [state_functions].
 
