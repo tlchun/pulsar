@@ -9,8 +9,6 @@
 -module(pulsar_protocol_frame).
 -author("root").
 
--module(pulsar_protocol_frame).
-
 -export([connect/1,
   topic_metadata/1,
   lookup_topic/1,
