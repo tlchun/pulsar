@@ -9,20 +9,28 @@
 -module(pulsar_producer).
 -author("root").
 
+-module(pulsar_producer).
+
 -behaviour(gen_statem).
 
 -export([send/2, send_sync/2, send_sync/3]).
 
--export([start_link/3, idle/3, connecting/3, connected/3]).
+-export([start_link/3,
+  idle/3,
+  connecting/3,
+  connected/3]).
 
--export([callback_mode/0, init/1, terminate/3, code_change/4]).
+-export([callback_mode/0,
+  init/1,
+  terminate/3,
+  code_change/4]).
 
+-vsn("4.2.6").
 
 callback_mode() -> [state_functions].
 
 -record(state,
-{
-  partitiontopic,
+{partitiontopic,
   broker_service_url,
   sock,
   request_id = 1,
@@ -35,8 +43,11 @@ callback_mode() -> [state_functions].
   requests = #{},
   last_bin = <<>>}).
 
-start_link(PartitionTopic, BrokerServiceUrl, ProducerOpts) ->
-  gen_statem:start_link(pulsar_producer, [PartitionTopic, BrokerServiceUrl, ProducerOpts], []).
+start_link(PartitionTopic, BrokerServiceUrl,
+    ProducerOpts) ->
+  gen_statem:start_link(pulsar_producer,
+    [PartitionTopic, BrokerServiceUrl, ProducerOpts],
+    []).
 
 send(Pid, Message) ->
   gen_statem:cast(Pid, {send, Message}).
@@ -47,7 +58,9 @@ send_sync(Pid, Message) ->
 send_sync(Pid, Message, Timeout) ->
   gen_statem:call(Pid, {send, Message}, Timeout).
 
-init([PartitionTopic, BrokerServiceUrl, ProducerOpts]) ->
+init([PartitionTopic,
+  BrokerServiceUrl,
+  ProducerOpts]) ->
   State = #state{partitiontopic = PartitionTopic,
     callback = maps:get(callback, ProducerOpts, undefined),
     batch_size = maps:get(batch_size, ProducerOpts, 0),
@@ -56,10 +69,21 @@ init([PartitionTopic, BrokerServiceUrl, ProducerOpts]) ->
   self() ! connecting,
   {ok, idle, State}.
 
-idle(_, connecting, State = #state{opts = Opts, broker_service_url = BrokerServiceUrl}) ->
+idle(_, connecting,
+    State = #state{opts = Opts,
+      broker_service_url = BrokerServiceUrl}) ->
   {Host, Port} = format_url(BrokerServiceUrl),
-  case gen_tcp:connect(Host, Port,
-    merge_opts(Opts, [binary, {packet, raw}, {reuseaddr, true}, {nodelay, true}, {active, true}, {reuseaddr, true}, {send_timeout, 60000}]), 60000)
+  case gen_tcp:connect(Host,
+    Port,
+    merge_opts(Opts,
+      [binary,
+        {packet, raw},
+        {reuseaddr, true},
+        {nodelay, true},
+        {active, true},
+        {reuseaddr, true},
+        {send_timeout, 60000}]),
+    60000)
   of
     {ok, Sock} ->
       tune_buffer(Sock),
@@ -73,19 +97,29 @@ connecting(_EventType, {tcp, _, Bin}, State) ->
   {Cmd, _} = pulsar_protocol_frame:parse(Bin),
   handle_response(Cmd, State).
 
-connected(_EventType, {tcp_closed, Sock}, State = #state{sock = Sock, partitiontopic = Topic}) ->
+connected(_EventType, {tcp_closed, Sock},
+    State = #state{sock = Sock, partitiontopic = Topic}) ->
   log_error("TcpClosed producer: ~p~n", [Topic]),
   erlang:send_after(5000, self(), connecting),
   {next_state, idle, State#state{sock = undefined}};
-connected(_EventType, {tcp, _, Bin}, State = #state{last_bin = LastBin}) ->
-  parse(pulsar_protocol_frame:parse(<<LastBin/binary, Bin/binary>>), State);
-connected(_EventType, ping, State = #state{sock = Sock}) ->
+connected(_EventType, {tcp, _, Bin},
+    State = #state{last_bin = LastBin}) ->
+  parse(pulsar_protocol_frame:parse(<<LastBin/binary,
+    Bin/binary>>),
+    State);
+connected(_EventType, ping,
+    State = #state{sock = Sock}) ->
   ping(Sock),
   {keep_state, State};
-connected({call, From}, {send, Message}, State = #state{sequence_id = SequenceId, requests = Reqs}) ->
+connected({call, From}, {send, Message},
+    State = #state{sequence_id = SequenceId,
+      requests = Reqs}) ->
   send_batch_payload(Message, State),
-  {keep_state, next_sequence_id(State#state{requests = maps:put(SequenceId, From, Reqs)})};
-connected(cast, {send, Message}, State = #state{batch_size = BatchSize}) ->
+  {keep_state,
+    next_sequence_id(State#state{requests =
+    maps:put(SequenceId, From, Reqs)})};
+connected(cast, {send, Message},
+    State = #state{batch_size = BatchSize}) ->
   BatchMessage = Message ++ collect_send_calls(BatchSize),
   send_batch_payload(BatchMessage, State),
   {keep_state, next_sequence_id(State)};
@@ -114,23 +148,31 @@ handle_response({connected, _ConnectedData},
   start_keepalive(),
   create_producer(Sock, Topic, RequestId, ProId),
   {next_state, connected, next_request_id(State)};
-handle_response({producer_success, #{producer_name := ProName}}, State) ->
+handle_response({producer_success,
+  #{producer_name := ProName}},
+    State) ->
   {keep_state, State#state{producer_name = ProName}};
 handle_response({pong, #{}}, State) ->
   start_keepalive(),
   {keep_state, State};
-handle_response({ping, #{}}, State = #state{sock = Sock}) ->
+handle_response({ping, #{}},
+    State = #state{sock = Sock}) ->
   pong(Sock),
   {keep_state, State};
-handle_response({close_producer, #{}}, State = #state{partitiontopic = Topic}) ->
+handle_response({close_producer, #{}},
+    State = #state{partitiontopic = Topic}) ->
   log_error("Close producer: ~p~n", [Topic]),
   {stop, {shutdown, closed_producer}, State};
-handle_response({send_receipt, Resp = #{sequence_id := SequenceId}}, State = #state{callback = undefined, requests = Reqs}) ->
+handle_response({send_receipt,
+  Resp = #{sequence_id := SequenceId}},
+    State = #state{callback = undefined,
+      requests = Reqs}) ->
   case maps:get(SequenceId, Reqs, undefined) of
     undefined -> {keep_state, State};
     From ->
       gen_statem:reply(From, Resp),
-      {keep_state, State#state{requests = maps:remove(SequenceId, Reqs)}}
+      {keep_state,
+        State#state{requests = maps:remove(SequenceId, Reqs)}}
   end;
 handle_response({send_receipt,
   Resp = #{sequence_id := SequenceId}},
@@ -152,7 +194,9 @@ handle_response(Msg, State) ->
   {keep_state, State}.
 
 connect(Sock) ->
-  Conn = #{client_version => "Pulsar-Client-Erlang-v0.0.1", protocol_version => 6},
+  Conn = #{client_version =>
+  "Pulsar-Client-Erlang-v0.0.1",
+    protocol_version => 6},
   gen_tcp:send(Sock, pulsar_protocol_frame:connect(Conn)).
 
 send_batch_payload(Messages,
@@ -257,15 +301,13 @@ format_url("pulsar://" ++ Url) ->
   {Host, list_to_integer(Port)};
 format_url(_) -> {"127.0.0.1", 6650}.
 
-next_request_id(State = #state{request_id =
-4294836225}) ->
+next_request_id(State = #state{request_id = 4294836225}) ->
   State#state{request_id = 1};
 next_request_id(State = #state{request_id =
 RequestId}) ->
   State#state{request_id = RequestId + 1}.
 
-next_sequence_id(State = #state{sequence_id =
-18445618199572250625}) ->
+next_sequence_id(State = #state{sequence_id = 18445618199572250625}) ->
   State#state{sequence_id = 1};
 next_sequence_id(State = #state{sequence_id =
 SequenceId}) ->
