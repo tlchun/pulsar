@@ -9,8 +9,6 @@
 -module(pulsar_producer).
 -author("root").
 
--module(pulsar_producer).
-
 -behaviour(gen_statem).
 
 -export([send/2, send_sync/2, send_sync/3]).
