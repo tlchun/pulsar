@@ -212,12 +212,8 @@ format_url("pulsar://" ++ Url) ->
   {Host, list_to_integer(Port)};
 format_url(_) -> {"127.0.0.1", 6650}.
 
-next_request_id(State = #state{request_id =
-4294836225}) ->
-  State#state{request_id = 1};
-next_request_id(State = #state{request_id =
-RequestId}) ->
-  State#state{request_id = RequestId + 1}.
+next_request_id(State = #state{request_id =4294836225}) ->State#state{request_id = 1};
+next_request_id(State = #state{request_id =RequestId}) ->State#state{request_id = RequestId + 1}.
 
 log_error(Fmt, Args) ->
   error_logger:error_msg(Fmt, Args).
