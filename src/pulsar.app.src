@@ -1,6 +1,6 @@
 {application,pulsar,
              [{description,"A Erlang client library for Apache Pulsar"},
-              {vsn,"1.0.0"},
+              {vsn,"0.5.0"},
               {modules,[
                 pulsar,
                 pulsar_api,
