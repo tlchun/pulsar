@@ -9,8 +9,8 @@
 -module(pulsar_client).
 -author("root").
 
--behaviour(gen_server).
 
+-behaviour(gen_server).
 -export([start_link/3]).
 
 -export([init/1,
@@ -21,34 +21,20 @@
   code_change/3]).
 
 -export([get_topic_metadata/2, lookup_topic/2]).
-
 -export([get_status/1]).
 
--record(state,
-{sock,
-  servers,
-  opts,
-  producers = #{},
-  request_id = 0,
-  requests = #{},
-  from,
-  last_bin = <<>>}).
+-record(state, {sock, servers, opts, producers = #{}, request_id = 0, requests = #{}, from, last_bin = <<>>}).
 
 
 start_link(ClientId, Servers, Opts) ->
-  gen_server:start_link({local, ClientId},
-    pulsar_client,
-    [Servers, Opts],
-    []).
+  gen_server:start_link({local, ClientId}, pulsar_client, [Servers, Opts], []).
 
 get_topic_metadata(Pid, Topic) ->
   Call = self(),
   gen_server:call(Pid, {get_topic_metadata, Topic, Call}).
 
 lookup_topic(Pid, PartitionTopic) ->
-  gen_server:call(Pid,
-    {lookup_topic, PartitionTopic},
-    30000).
+  gen_server:call(Pid, {lookup_topic, PartitionTopic}, 30000).
 
 get_status(Pid) ->
   gen_server:call(Pid, get_status, 5000).
@@ -61,41 +47,24 @@ init([Servers, Opts]) ->
   end.
 
 handle_call({get_topic_metadata, Topic, Call}, From,
-    State = #state{sock = Sock, request_id = RequestId,
-      requests = Reqs, producers = Producers,
-      servers = Servers}) ->
+    State = #state{sock = Sock, request_id = RequestId, requests = Reqs, producers = Producers, servers = Servers}) ->
   case get_sock(Servers, Sock) of
     error ->
       log_error("Servers: ~p down", [Servers]),
       {noreply, State};
     Sock1 ->
       Metadata = topic_metadata(Sock1, Topic, RequestId),
-      {noreply,
-        next_request_id(State#state{requests =
-        maps:put(RequestId,
-          {From, Metadata},
-          Reqs),
-          producers =
-          maps:put(Topic, Call, Producers),
-          sock = Sock1})}
+      {noreply, next_request_id(State#state{requests = maps:put(RequestId, {From, Metadata}, Reqs), producers = maps:put(Topic, Call, Producers), sock = Sock1})}
   end;
-handle_call({lookup_topic, PartitionTopic}, From,
-    State = #state{sock = Sock, request_id = RequestId,
-      requests = Reqs, servers = Servers}) ->
+handle_call({lookup_topic, PartitionTopic}, From, State = #state{sock = Sock, request_id = RequestId, requests = Reqs, servers = Servers}) ->
   case get_sock(Servers, Sock) of
     error ->
       log_error("Servers: ~p down", [Servers]),
       {noreply, State};
     Sock1 ->
-      LookupTopic = lookup_topic(Sock1,
-        PartitionTopic,
-        RequestId),
+      LookupTopic = lookup_topic(Sock1, PartitionTopic, RequestId),
       {noreply,
-        next_request_id(State#state{requests =
-        maps:put(RequestId,
-          {From, LookupTopic},
-          Reqs),
-          sock = Sock1})}
+        next_request_id(State#state{requests = maps:put(RequestId, {From, LookupTopic}, Reqs), sock = Sock1})}
   end;
 handle_call(get_status, From,
     State = #state{sock = undefined, servers = Servers}) ->
@@ -197,13 +166,7 @@ try_connect([]) -> error;
 try_connect([{Host, Port} | Servers]) ->
   case gen_tcp:connect(Host,
     Port,
-    [binary,
-      {packet, raw},
-      {reuseaddr, true},
-      {nodelay, true},
-      {active, true},
-      {reuseaddr, true},
-      {send_timeout, 60000}],
+    [binary, {packet, raw}, {nodelay, true}, {active, true}, {reuseaddr, true}, {send_timeout, 60000}],
     60000)
   of
     {ok, Sock} ->
