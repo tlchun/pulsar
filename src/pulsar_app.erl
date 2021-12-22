@@ -8,12 +8,10 @@
 %%%-------------------------------------------------------------------
 -module(pulsar_app).
 -author("root").
+
 -behaviour(application).
-
 -export([start/2, stop/1]).
-%% 启动应用
-start(_, _) ->
-  pulsar_sup:start_link().
 
-%% 停止应用
+start(_, _) -> pulsar_sup:start_link().
+
 stop(_) -> ok.
